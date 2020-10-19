@@ -152,9 +152,7 @@ int bitXor(int x, int y) {
  *   Rating: 1
  */
 int tmin(void) {
-
   return 1 << 31;
-
 }
 //2
 /*
@@ -165,7 +163,10 @@ int tmin(void) {
  *   Rating: 1
  */
 int isTmax(int x) {
-  return !((1 << 31) - 1 - x);
+  // add !!(x+1) because of the 0xffffffff
+  //return !((x + 1) ^ (~x)) & !!(x + 1);
+  // another solution
+  return !(x ^ ~(1 << 31));
 }
 /* 
  * allOddBits - return 1 if all odd-numbered bits in word set to 1
@@ -176,7 +177,11 @@ int isTmax(int x) {
  *   Rating: 2
  */
 int allOddBits(int x) {
-  return x ^ (x << 1);
+  // try to build the mask 1010....1010
+  int mask = (0xAA << 8) + 0xAA;
+  mask = (mask << 16) + mask;
+
+  return !((mask & x) ^ mask);
 }
 /* 
  * negate - return -x 
@@ -199,7 +204,27 @@ int negate(int x) {
  *   Rating: 3
  */
 int isAsciiDigit(int x) {
-  return 2;
+  // 0x30 <= x <= 0x39;
+  // x - 0x30 >= 0
+  // x - 0x3a < 0
+  int var0 = x + ~0x30 + 1;
+  int var1 = x + ~0x3a + 1;
+  
+  return !((var0 >> 31) & 1) & ((var1 >> 31) & 1);
+  /*
+  int var0 = 0x30 ^ x;
+  int var1 = 0x31 ^ x;
+  int var2 = 0x32 ^ x;
+  int var3 = 0x33 ^ x;
+  int var4 = 0x34 ^ x;
+  int var5 = 0x35 ^ x;
+  int var6 = 0x36 ^ x;
+  int var7 = 0x37 ^ x;
+  int var8 = 0x38 ^ x;
+  int var9 = 0x39 ^ x;
+  
+  return !var0 | !var1 | !var2 | !var3 | !var4 | !var5 | !var6 | !var7 | !var8 | !var9;
+  */
 }
 /* 
  * conditional - same as x ? y : z 
@@ -209,7 +234,7 @@ int isAsciiDigit(int x) {
  *   Rating: 3
  */
 int conditional(int x, int y, int z) {
-  return 2;
+  return (~(~(!x) + 1) & y) + ((~(!x) + 1) & z);
 }
 /* 
  * isLessOrEqual - if x <= y  then return 1, else return 0 
@@ -219,7 +244,15 @@ int conditional(int x, int y, int z) {
  *   Rating: 3
  */
 int isLessOrEqual(int x, int y) {
-  return 2;
+  int signX = (x >> 31) & 1;
+  int signY = (y >> 31) & 1;
+  // if sign is diff, that x must be negative and y must be positive;
+  int signDiff = (signX ^ signY) & signX & !signY;
+  // x - y = x + ~y + 1
+  int signSame = !(signX ^ signY) & (!(x + ~y + 1) | (((x + ~y + 1) >> 31) & 1));
+  
+  // make sure to be 0 or 1
+  return !!(signDiff | signSame);
 }
 //4
 /* 
@@ -231,7 +264,8 @@ int isLessOrEqual(int x, int y) {
  *   Rating: 4 
  */
 int logicalNeg(int x) {
-  return 2;
+  // x != 0 ==> x and -x is one positive, the other is negtive, so x | -x , the sign bit must be 1;
+  return ((x | (~x + 1)) >> 31) + 1;
 }
 /* howManyBits - return the minimum number of bits required to represent x in
  *             two's complement
@@ -246,7 +280,34 @@ int logicalNeg(int x) {
  *  Rating: 4
  */
 int howManyBits(int x) {
-  return 0;
+  // if x == 0 then 1
+  int val1 = !(x ^ 0);
+  // if x == -1 then 1
+  int val2 = !(x ^ (~0));
+  // if x != 0 && x != -1 then 0xffffffff
+  // if x == 0 || x == -1 then 0
+  int val3 = ~(~(val1 | val2) + 1);
+  
+  int bit_16, bit_8, bit_4, bit_2, bit_1;
+  int sum;
+  // x < 0 ? op = ~x : op = x
+  int op = x ^ (x >> 31);
+  
+  // whether pre 16 bits have 1
+  bit_16 = (!!(op >> 16)) << 4;
+  op = op >> bit_16;
+  bit_8 = (!!(op >> 8)) << 3;
+  op = op >> bit_8;
+  bit_4 = (!!(op >> 4)) << 2;
+  op = op >> bit_4;
+  bit_2 = (!!(op >> 2)) << 1;
+  op = op >> bit_2;
+  bit_1 = (!!(op >> 1));
+  op = op >> bit_1;
+  
+  sum = 2 + bit_16 + bit_8 + bit_4 + bit_2 + bit_1;
+  
+  return val1 | val2 | (val3 & sum);
 }
 //float
 /* 
@@ -261,7 +322,22 @@ int howManyBits(int x) {
  *   Rating: 4
  */
 unsigned floatScale2(unsigned uf) {
-  return 2;
+  int sign = (uf & 0x80000000) >> 31;
+  int exp = (uf & 0x7f800000) >> 23;
+  int frac = uf & 0x007fffff;
+  
+  if(exp == 0xff) {
+    return uf;
+  } else if(exp == 0) {
+    if(frac & 0x400000) {
+      exp = 1;
+    }
+    frac = (frac << 1) & 0x007fffff;
+  } else {
+    exp = (exp + 1) & 0xff;
+  }
+
+  return (sign << 31) + (exp << 23) + frac;
 }
 /* 
  * floatFloat2Int - Return bit-level equivalent of expression (int) f
@@ -276,7 +352,23 @@ unsigned floatScale2(unsigned uf) {
  *   Rating: 4
  */
 int floatFloat2Int(unsigned uf) {
-  return 2;
+  int sign = uf & 0x80000000;
+  int exp = (uf & 0x7f800000) >> 23;
+  int frac = uf & 0x007fffff;
+  int E = exp - 127;
+  
+  if(exp == 0xff || E > 30) {
+    return 0x80000000u;
+  }
+  if(E < 0) {
+    return 0;
+  }
+  
+  int ans = (frac >> (23 - E)) + (1 << E);
+  if(sign) {
+    ans = ~ans + 1;
+  }
+  return ans;
 }
 /* 
  * floatPower2 - Return bit-level equivalent of the expression 2.0^x
@@ -292,5 +384,12 @@ int floatFloat2Int(unsigned uf) {
  *   Rating: 4
  */
 unsigned floatPower2(int x) {
-    return 2;
+  // somebody says it works in vs2017, but in there, it is a loop.
+  if(x >= -126 && x <= 127) {
+    return (x + 127) << 23;
+  } else if(x < -126) {
+    return 0;
+  } else {
+    return 0xff << 23;
+  }
 }
